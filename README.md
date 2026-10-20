@@ -29,8 +29,30 @@ no exploitation, no brute force, no authentication attacks.
 
 ## Install
 
+The easiest way — the installer puts `magnify` on your PATH so it runs
+from anywhere:
+
 ```sh
-pip install .
+git clone https://github.com/12hrformat/magnify.git
+cd magnify
+./install.sh            # user install (~/.local), no sudo needed
+```
+
+`./install.sh` figures out the best method available on your machine
+(pipx if you have it, otherwise pip, otherwise a tiny launcher) and
+verifies the result. Useful flags:
+
+```sh
+./install.sh --check        # report what's already installed, no changes
+./install.sh --system       # system-wide install (needs sudo)
+./install.sh --uninstall    # remove it cleanly
+```
+
+Prefer to do it yourself?
+
+```sh
+pipx install .              # isolated, recommended
+pip install .               # or a plain pip install
 magnify
 ```
 

@@ -10,7 +10,7 @@ license=('MIT')
 depends=('python')
 makedepends=('python-build' 'python-installer' 'python-wheel' 'python-setuptools')
 source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
-sha516sums=('SKIP')
+sha256sums=('SKIP')
 groups=('blackarch' 'blackarch-recon')
 
 build() {
