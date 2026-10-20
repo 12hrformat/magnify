@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "magnify-osint"
+version = "0.1.0"
+description = "Interactive OSINT orchestrator: username sweep, email intel, dork workshop, optional AI pivots"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.10"
+authors = [{ name = "magnify contributors" }]
+keywords = ["osint", "recon", "security", "username", "dorking"]
+classifiers = [
+    "Environment :: Console",
+    "Intended Audience :: Information Technology",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Topic :: Security",
+]
+# zero runtime dependencies - standard library only
+dependencies = []
+
+[project.scripts]
+magnify = "magnify.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/12hrformat/magnify"
+Repository = "https://github.com/12hrformat/magnify"
+
+[tool.setuptools.packages.find]
+include = ["magnify*"]
