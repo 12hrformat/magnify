@@ -1,10 +1,16 @@
+<!-- Logo: drop your image at assets/logo.png (or .svg) and update the
+     filename below to match. Relative paths work on GitHub and PyPI. -->
+<p align="center">
+  <img src="assets/logo.png" alt="magnify" width="420">
+</p>
+
 # magnify
 
 Interactive OSINT orchestrator for authorized reconnaissance. One
 command, one menu, one report.
 
 ```
-name / email / handle / domain
+name / email / handle / website domain
    │
    ├─► email intelligence   MX · SPF · DMARC · provider · gravatar · disposable
    ├─► username hunt        name → 40 variants → sweep across ~45 sites
@@ -42,20 +48,23 @@ Zero runtime dependencies — Python 3.10+ standard library only.
 
 ```sh
 $ magnify
-  __  __ _           _ __  __ _
- |  \/  (_)_ __   __| |  \/  | |_   _ _ __ ___
- | |\/| | | '_ \ / _` | |\/| | | | | | '__/ _ \
- | |  | | | | | | (_| | |  | | | |_| | | |  __/
- |_|  |_|_|_| |_|\__,_|_|  |_|_|\__,_|_|  \___|
+   ▄▄▄▄███▄▄▄▄      ▄████████    ▄██████▄  ███▄▄▄▄    ▄█     ▄████████ ▄██   ▄
+ ▄██▀▀▀███▀▀▀██▄   ███    ███   ███    ███ ███▀▀▀██▄ ███    ███    ███ ███   ██▄
+ ███   ███   ███   ███    ███   ███    █▀  ███   ███ ███▌   ███    █▀  ███▄▄▄███
+ ███   ███   ███   ███    ███  ▄███        ███   ███ ███▌  ▄███▄▄▄     ▀▀▀▀▀▀███
+ ███   ███   ███ ▀███████████ ▀▀███ ████▄  ███   ███ ███▌ ▀▀███▀▀▀     ▄██   ███
+ ███   ███   ███   ███    ███   ███    ███ ███   ███ ███    ███        ███   ███
+ ███   ███   ███   ███    ███   ███    ███ ███   ███ ███    ███        ███   ███
+  ▀█   ███   █▀    ███    █▀    ████████▀   ▀█   █▀  █▀     ███         ▀█████▀
 
   interactive OSINT orchestrator  |  authorized use only
 
-full name []: Jane Doe
-email []: jane@example.com
-known username/handle []: janedoe
-domain []:
+full name []: Joe Mama
+email (separated by spaces, if multiple) []: joe@example.com joe.mama@work.com
+known username/handle []: joemama
+website domain (if they have one) []:
 
-┌─ magnify v0.1.0  —  name=Jane Doe  email=jane@example.com
+┌─ magnify v0.1.0  —  name=Joe Mama  email=joe@example.com
 │ [1] email lookup
 │ [2] username hunt (name -> variants -> sweep)
 │ [3] dork workshop (interactive table)
@@ -69,9 +78,25 @@ domain []:
 ### Scripted / non-interactive
 
 ```sh
-magnify --name "Jane Doe" --email jane@example.com \
-        --sweep --dorks --save jane-report --no-color
+magnify --name "Joe Mama" --email joe@example.com \
+        --sweep --dorks --save joe-report --no-color
 ```
+
+Multiple emails work in both modes — space- or comma-separated in the
+prompt, or repeat the flag:
+
+```sh
+magnify --email joe@example.com --email joe.mama@work.com --dorks
+```
+
+## Target fields
+
+| Field | Used for |
+|---|---|
+| `name` | username-variant generation and name-based dorks |
+| `email` | email intelligence (MX/SPF/DMARC) and leak dorks. **Multiple allowed** — each address gets its own lookup and its own leak battery |
+| `username` | a known handle, checked directly against every site |
+| `website domain (if they have one)` | site-scoped infrastructure dorks (`site:example.com intitle:"index of"`). Only used if you set it — an email never leaks into this field |
 
 ## Configuration (all optional, all environment variables)
 

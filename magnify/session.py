@@ -12,6 +12,16 @@ class Target:
     email: str = ""
     username: str = ""
     domain: str = ""
+    emails: list[str] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        # Keep `email` (primary) and `emails` (all) consistent no matter
+        # which one the caller populated.
+        if self.email:
+            self.emails = [self.email] + [e for e in self.emails
+                                          if e != self.email]
+        elif self.emails:
+            self.email = self.emails[0]
 
     def empty(self) -> bool:
         return not any((self.name, self.email, self.username, self.domain))
@@ -24,6 +34,15 @@ class Target:
             ("domain", self.domain),
         ]
         return "  ".join(f"{k}={v}" for k, v in parts if v)
+
+    @staticmethod
+    def parse_emails(raw: str) -> list[str]:
+        """Split a whitespace/comma separated email string."""
+        out: list[str] = []
+        for chunk in raw.replace(",", " ").split():
+            if chunk and chunk not in out:
+                out.append(chunk)
+        return out
 
 
 @dataclass

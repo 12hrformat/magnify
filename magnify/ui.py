@@ -62,13 +62,18 @@ def cyan(text: str) -> str:
 
 def banner() -> None:
     art = r"""
-  __  __ _           _ __  __ _
- |  \/  (_)_ __   __| |  \/  | |_   _ _ __ ___
- | |\/| | | '_ \ / _` | |\/| | | | | | '__/ _ \
- | |  | | | | | | (_| | |  | | | |_| | | |  __/
- |_|  |_|_|_| |_|\__,_|_|  |_|_|\__,_|_|  \___|
+   ▄▄▄▄███▄▄▄▄      ▄████████    ▄██████▄  ███▄▄▄▄    ▄█     ▄████████ ▄██   ▄
+ ▄██▀▀▀███▀▀▀██▄   ███    ███   ███    ███ ███▀▀▀██▄ ███    ███    ███ ███   ██▄
+ ███   ███   ███   ███    ███   ███    █▀  ███   ███ ███▌   ███    █▀  ███▄▄▄███
+ ███   ███   ███   ███    ███  ▄███        ███   ███ ███▌  ▄███▄▄▄     ▀▀▀▀▀▀███
+ ███   ███   ███ ▀███████████ ▀▀███ ████▄  ███   ███ ███▌ ▀▀███▀▀▀     ▄██   ███
+ ███   ███   ███   ███    ███   ███    ███ ███   ███ ███    ███        ███   ███
+ ███   ███   ███   ███    ███   ███    ███ ███   ███ ███    ███        ███   ███
+  ▀█   ███   █▀    ███    █▀    ████████▀   ▀█   █▀  █▀     ███         ▀█████▀
 """
-    print(cyan(art))
+    # Strip trailing whitespace so we never emit lines wider than the
+    # art itself (keeps it from wrapping on an 80-column terminal).
+    print(cyan("\n".join(line.rstrip() for line in art.splitlines())))
     print(dim("  interactive OSINT orchestrator  |  authorized use only"))
     print()
 
@@ -85,9 +90,16 @@ def menu(title: str, items: list[tuple[str, str]]) -> str:
         except (EOFError, KeyboardInterrupt):
             print()
             return "quit"
+        except Exception:
+            # Any other input failure (closed stdin, broken pipe, a
+            # container with no tty) must exit rather than spin.
+            print()
+            return "quit"
         keys = [k for k, _ in items]
         if choice in keys:
             return choice
+        if choice == "quit":
+            return "quit"
         print(red(f"  pick one of: {', '.join(keys)}"))
 
 

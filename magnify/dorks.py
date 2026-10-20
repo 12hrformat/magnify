@@ -62,7 +62,10 @@ class DorkConfig:
 
 def _ctx(target) -> dict[str, str]:
     name = target.name or target.username or ""
-    email = target.email
+    emails = list(getattr(target, "emails", []) or [])
+    if not emails and target.email:
+        emails = [target.email]
+    email = target.email or (emails[0] if emails else "")
     local, _, domain = email.partition("@") if email else ("", "", "")
     username = target.username or (local if local else "")
     # `domain` is for *website* recon (index-of, admin panels). Never
@@ -72,6 +75,7 @@ def _ctx(target) -> dict[str, str]:
     return {
         "name": name,
         "email": email,
+        "emails": emails,
         "username": username,
         "local": local,
         "domain": site_domain,
@@ -88,9 +92,10 @@ def build(target, config: DorkConfig) -> list[str]:
     phrase = f'"{ctx["name"]}"' if ctx["name"] else ""
     dorks: list[str] = []
 
-    def add(template: str) -> None:
+    def add(template: str, extra: dict[str, str] | None = None) -> None:
+        values = ctx if extra is None else {**ctx, **extra}
         try:
-            rendered = template.format(**ctx)
+            rendered = template.format(**values)
         except KeyError:
             return
         rendered = " ".join(rendered.split())
@@ -120,10 +125,17 @@ def build(target, config: DorkConfig) -> list[str]:
     if "filetype:pdf (all sites)" in config.modifiers and phrase:
         add(f"{phrase} filetype:pdf (site:edu OR site:gov OR site:org)")
 
-    # email leak / breach recon battery
-    if config.include_leaks and ctx["email"]:
-        for tmpl in LEAK_PATTERNS:
-            add(tmpl)
+    # email leak / breach recon battery - once per address
+    if config.include_leaks:
+        for addr in ctx["emails"]:
+            addr_local, _, addr_domain = addr.partition("@")
+            extra = {
+                "email": addr,
+                "local": addr_local,
+                "email_domain": addr_domain,
+            }
+            for tmpl in LEAK_PATTERNS:
+                add(tmpl, extra)
 
     # domain recon if a domain is set
     if ctx["domain"]:

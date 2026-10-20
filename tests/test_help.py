@@ -13,18 +13,31 @@ def _strip(text: str) -> str:
 
 
 class CapturedMenu:
-    """Drive help_menu.menu() with scripted input, capture stdout."""
+    """Drive help_menu.menu() with scripted input, capture stdout.
+
+    When the scripted input runs out we raise EOFError (like a real
+    terminal closing) rather than StopIteration, so the code under
+    test follows its normal EOF path.
+    """
 
     def __init__(self, inputs):
-        self._inputs = iter(inputs)
+        self._inputs = list(inputs)
+        self._pos = 0
         self._buffer = io.StringIO()
         self._real_stdout = None
+
+    def _scripted_input(self, prompt=""):
+        if self._pos >= len(self._inputs):
+            raise EOFError
+        value = self._inputs[self._pos]
+        self._pos += 1
+        return value
 
     def __enter__(self):
         self._real_stdout = ui.sys.stdout
         self._real_input = ui.input
         ui.sys.stdout = self._buffer
-        ui.input = lambda prompt="": next(self._inputs, "")
+        ui.input = self._scripted_input
         return self
 
     def __exit__(self, *exc):

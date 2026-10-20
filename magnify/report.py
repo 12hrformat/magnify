@@ -22,14 +22,31 @@ def _markdown(session: Session) -> str:
     if session.email_intel:
         out.append("## Email intelligence")
         out.append("")
-        out.append("| check | result |")
-        out.append("|---|---|")
-        for key, value in session.email_intel.items():
-            if key in ("email",):
-                continue
-            rendered = value if isinstance(value, str) else json.dumps(value)
-            out.append(f"| {key} | {rendered[:200]} |")
-        out.append("")
+        per_email = session.email_intel.get("emails")
+        if isinstance(per_email, dict) and per_email:
+            # one subsection per address
+            for addr, findings in per_email.items():
+                out.append(f"### {addr}")
+                out.append("")
+                out.append("| check | result |")
+                out.append("|---|---|")
+                for key, value in findings.items():
+                    if key == "email":
+                        continue
+                    rendered = (value if isinstance(value, str)
+                                else json.dumps(value))
+                    out.append(f"| {key} | {rendered[:200]} |")
+                out.append("")
+        else:
+            out.append("| check | result |")
+            out.append("|---|---|")
+            for key, value in session.email_intel.items():
+                if key in ("email", "emails"):
+                    continue
+                rendered = (value if isinstance(value, str)
+                            else json.dumps(value))
+                out.append(f"| {key} | {rendered[:200]} |")
+            out.append("")
 
     if session.username_hits:
         out.append("## Username hits")

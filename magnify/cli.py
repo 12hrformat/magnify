@@ -23,9 +23,10 @@ def _build_parser() -> argparse.ArgumentParser:
         prog="magnify",
         description="interactive OSINT orchestrator (authorized use only)")
     p.add_argument("--name", help="target full name")
-    p.add_argument("--email", help="target email")
+    p.add_argument("--email", action="append", default=[],
+                   help="target email (repeat, or separate by spaces)")
     p.add_argument("--username", help="known username/handle")
-    p.add_argument("--domain", help="target domain")
+    p.add_argument("--domain", help="website domain, if they have one")
     p.add_argument("--sweep", action="store_true",
                    help="non-interactive: run username sweep")
     p.add_argument("--dorks", action="store_true",
@@ -44,27 +45,46 @@ def _build_parser() -> argparse.ArgumentParser:
     return p
 
 
+def _set_emails(t: Target, raw: str) -> None:
+    """Apply a space/comma separated email string to the target."""
+    emails = Target.parse_emails(raw)
+    if not emails:
+        return
+    t.emails = emails
+    t.email = emails[0]
+
+
 def _collect_target(session: Session) -> None:
     ui.info("describe the target (press Enter to skip any field)")
     t = session.target
     t.name = ui.ask("full name", t.name)
-    t.email = ui.ask("email", t.email)
+    _set_emails(t, ui.ask("email (separated by spaces, if multiple)",
+                          " ".join(t.emails)))
     t.username = ui.ask("known username/handle", t.username)
-    t.domain = ui.ask("domain", t.domain)
+    t.domain = ui.ask("website domain (if they have one)", t.domain)
     if t.empty():
         ui.warn("nothing set — fill something before running modules")
 
 
 def _do_email_lookup(session: Session) -> None:
-    email = session.target.email or ui.ask("email to look up")
-    if not email:
+    t = session.target
+    if not t.emails:
+        _set_emails(t, ui.ask("email to look up (separated by spaces)"))
+    if not t.emails:
         ui.err("no email given")
         return
-    session.target.email = email
-    with ui.spinner(f"querying DNS and services for {email}"):
-        session.email_intel = emailintel.lookup(email)
-    for line in emailintel.summarize(session.email_intel):
-        ui.finding(line)
+    results: dict[str, dict] = {}
+    for email in t.emails:
+        with ui.spinner(f"querying DNS and services for {email}"):
+            findings = emailintel.lookup(email)
+        results[email] = findings
+        print(f"\n  {ui.bold(email)}")
+        for line in emailintel.summarize(findings):
+            ui.finding(line)
+    # Primary address stays in email_intel for backwards compatibility,
+    # every address is retained under "emails".
+    session.email_intel = dict(results[t.emails[0]])
+    session.email_intel["emails"] = results
 
 
 def _do_username_hunt(session: Session, threads: int, timeout: float) -> None:
@@ -121,16 +141,29 @@ def _do_dork_workshop(session: Session) -> None:
     mod_labels = [label for label, _ in dorks.MODIFIERS]
     chosen = ui.select_table("modifiers", mod_labels, columns=2, default="none")
     config.modifiers = [mod_labels[i] for i in chosen]
-    config.include_leaks = bool(session.target.email)
+    config.include_leaks = bool(session.target.emails)
     session.dorks = dorks.build(session.target, config)
     ui.ok(f"{len(session.dorks)} dorks generated")
     for dork in session.dorks:
         print(f"    {ui.cyan('>')} {dork}")
+    near = search.near_miss_env()
+    if near and not search.backend():
+        ui.warn("found environment variables that look like a search "
+                "backend but are NOT being read:")
+        for name in near:
+            ui.warn(f"    {name}  ->  should be SERPAPI_KEY or "
+                    f"MAGNIFY_SEARX_URL (names are case-sensitive)")
+        ui.info("press [h] for the full connection guide")
     if search.backend():
         if ui.confirm(f"execute against {search.backend()}?"):
             with ui.spinner("running dork battery"):
                 session.search_results = search.run(session.dorks)
             total = sum(len(r.get("hits", [])) for r in session.search_results)
+            errors = [r["error"] for r in session.search_results
+                      if r.get("error")]
+            if errors:
+                ui.warn(f"{len(errors)} dork(s) failed, first error: "
+                        f"{errors[0]}")
             ui.ok(f"{total} search results collected")
     else:
         ui.info("no search backend configured — press [h] in the main "
@@ -180,7 +213,7 @@ def _interactive(args: argparse.Namespace) -> int:
     if args.name:
         session.target.name = args.name
     if args.email:
-        session.target.email = args.email
+        _set_emails(session.target, " ".join(args.email))
     if args.username:
         session.target.username = args.username
     if args.domain:
@@ -244,7 +277,8 @@ def _noninteractive(args: argparse.Namespace) -> int:
             print(body)
         return 0
     session = Session(Target(
-        name=args.name or "", email=args.email or "",
+        name=args.name or "",
+        emails=Target.parse_emails(" ".join(args.email)),
         username=args.username or "", domain=args.domain or ""))
     if session.target.empty():
         print("error: provide at least one of --name/--email/"

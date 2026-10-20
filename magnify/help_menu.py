@@ -8,54 +8,96 @@ from __future__ import annotations
 
 import os
 
-from . import ui
+from . import search, ui
 
 SEARX_GUIDE = """\
 CONNECT A SEARCH BACKEND  (enables dork execution)
 
-Option A - SearXNG (free, self-hosted, recommended)
+  Two options. Pick one:
 
-  SearXNG is a metasearch engine that aggregates Google/Bing/Brave/etc.
-  Running your own instance means unlimited dork queries with no API key
-  and no rate limit on someone else's quota.
+  ┌─────────────────────────────────────────────────────────────────┐
+  │  A. SearXNG      FREE · unlimited · you self-host it            │
+  │  B. SerpAPI      paid · 100 free/month · zero setup             │
+  └─────────────────────────────────────────────────────────────────┘
 
-  1. docker run -d --name searxng -p 8888:8080 \\
-       -v searxng-data:/etc/searxng searxng/searxng
+  ── OPTION A · SearXNG (free, recommended) ───────────────────────
 
-     (no docker? pip install searxng, or see https://docs.searxng.org)
+  SearXNG is a metasearch engine that aggregates Google, Bing, Brave
+  and others. Self-hosting means unlimited dork queries, no API key,
+  and no dependence on someone else's quota.
 
-  2. SearXNG ships with the JSON API DISABLED. You must turn it on.
-     Edit the container's settings.yml and make sure this block exists:
+  STEP 1 · Start the container
 
-       search:
-         formats:
-           - html
-           - json          <-- add this line
+      docker run -d --name searxng -p 8888:8080 \\
+        -v searxng-data:/etc/searxng searxng/searxng
 
-     Docker one-liner to append it:
-       docker exec searxng sh -c \\
-         "sed -i 's/^  formats:/  formats:\\n    - json/' /etc/searxng/settings.yml"
+      No Docker?  pip install searxng
+      Docs:       https://docs.searxng.org
 
-     then: docker restart searxng
+  STEP 2 · Enable the JSON API  (the step everyone misses!)
 
-  3. Verify the JSON API works:
-       curl -s 'http://localhost:8888/search?q=test&format=json' | head -c 200
+      SearXNG ships with its JSON API TURNED OFF. Without this you get
+      HTTP 403 and magnify looks broken. Enable it by editing the
+      settings file INSIDE the container.
 
-  4. Point magnify at it (in this shell, or add to ~/.bashrc):
+      a) Copy it out so you can edit it locally:
 
-       export MAGNIFY_SEARX_URL=http://localhost:8888
+           docker cp searxng:/etc/searxng/settings.yml ./settings.yml
 
-Option B - SerpAPI (hosted, paid, zero setup)
+      b) Open ./settings.yml in any editor and find the `search:`
+         section. Add the `json` line so it looks like this:
 
-  1. Sign up at https://serpapi.com  (free tier = 100 searches/month)
-  2. Copy your key from the dashboard
-  3. export SERPAPI_KEY=your_key_here
+             search:
+               formats:
+                 - html
+                 - json          <-- ADD THIS LINE
 
-Which one?
-  SearXNG  - free, unlimited, you run it, works offline from 3rd parties
-  SerpAPI  - costs money past the free tier, but one command to start
+         Exact command if you prefer no editor:
 
-After either: menu [3] dork workshop will offer to execute your dorks.
+             sed -i '/^  formats:/a\\    - json' ./settings.yml
+
+      c) Copy it back and restart:
+
+           docker cp ./settings.yml searxng:/etc/searxng/settings.yml
+           docker restart searxng
+
+  STEP 3 · Confirm it works
+
+      curl -s 'http://localhost:8888/search?q=test&format=json' | head -c 200
+
+      Good  ->  JSON starting with {"query": ...
+      Bad   ->  HTML, an error page, or "format not supported"
+
+  STEP 4 · Connect magnify
+
+      export MAGNIFY_SEARX_URL=http://localhost:8888
+
+      Make it permanent by adding that line to ~/.bashrc (or ~/.zshrc).
+
+  ── OPTION B · SerpAPI (hosted, zero setup) ──────────────────────
+
+  The name is the #1 mistake here. It is SERPAPI_KEY, not SERP_API,
+  not SERPAPI, not serpapi.
+
+  STEP 1 · Sign up at https://serpapi.com
+           Free tier = 100 searches per month.
+
+  STEP 2 · Copy the key from your dashboard.
+
+  STEP 3 · Export it - note the exact name and CAPITALS:
+
+      export SERPAPI_KEY=your_key_here
+
+      WRONG:  export serpapi=...        (missing _KEY)
+      WRONG:  export SERP_API_KEY=...   (misplaced underscore)
+      RIGHT:  export SERPAPI_KEY=...
+
+  ── Which one? ───────────────────────────────────────────────────
+
+      SearXNG   free · unlimited · runs on your machine · private
+      SerpAPI   costs money past 100/mo · one command to start
+
+  After either, menu [3] will offer to run your dorks automatically.
 """
 
 LLM_GUIDE = """\
@@ -151,10 +193,17 @@ def show_status() -> None:
     for var, desc in ENV_VARS:
         print(f"    {ui.cyan(var):<28} {_status(var):<14} {ui.dim(desc)}")
     print()
+    near = search.near_miss_env()
+    if near and not search.backend():
+        ui.warn("these look like backend vars but are NOT read (check "
+                "the exact name):")
+        for name in near:
+            ui.warn(f"    {name}")
+        print()
     backend = None
-    if os.environ.get("MAGNIFY_SEARX_URL"):
-        backend = "SearXNG (" + os.environ["MAGNIFY_SEARX_URL"] + ")"
-    elif os.environ.get("SERPAPI_KEY"):
+    if search.searx_url():
+        backend = "SearXNG (" + search.searx_url() + ")"
+    elif search.serpapi_key():
         backend = "SerpAPI"
     if backend:
         ui.ok(f"dork execution: ready via {backend}")
@@ -168,9 +217,37 @@ def show_status() -> None:
 
 
 def _section(title: str, body: str) -> None:
-    print(ui.bold(ui.cyan(f"\n  === {title} ===")))
+    """Render a guide with light colorisation.
+
+    Rules (deliberately simple so any guide reads well):
+      - step headings / boxed options  -> bold cyan
+      - WRONG / misses the point       -> red
+      - RIGHT / works                  -> green
+      - commands (indented 4+ spaces)  -> bold white-ish
+      - everything else                -> plain
+    """
+    print()
+    print(ui.cyan("  ╔" + "═" * 66 + "╗"))
+    print(ui.cyan("  ║ ") + ui.bold(f"{title:<64}") + ui.cyan(" ║"))
+    print(ui.cyan("  ╚" + "═" * 66 + "╝"))
     for line in body.rstrip().splitlines():
-        print("  " + line)
+        stripped = line.strip()
+        upper = stripped.upper()
+        if not stripped:
+            print()
+        elif upper.startswith(("WRONG", "BAD", "DON'T", "DO NOT")):
+            print("  " + ui.red(line))
+        elif upper.startswith(("RIGHT", "GOOD")) or "✔" in stripped:
+            print("  " + ui.green(line))
+        elif upper.startswith("STEP ") or upper.startswith("OPTION "):
+            print("  " + ui.bold(ui.cyan(line)))
+        elif stripped.startswith("──"):
+            print("  " + ui.bold(ui.blue(line)))
+        elif line.startswith("    "):
+            # indented command lines stand out
+            print("  " + ui.cyan(line))
+        else:
+            print("  " + line)
 
 
 def menu() -> None:
@@ -205,7 +282,7 @@ def menu() -> None:
         else:
             return
         try:
-            input(ui.dim("\n  press Enter to continue "))
+            ui.input(ui.dim("\n  press Enter to continue "))
         except (EOFError, KeyboardInterrupt):
             print()
             return
