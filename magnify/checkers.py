@@ -75,9 +75,17 @@ def _probe(site: Site, username: str, timeout: float) -> dict:
 
 def sweep(usernames: list[str], threads: int = 16, timeout: float = 10.0,
           progress: Callable[[str], None] | None = None,
+          on_result: Callable[[dict], None] | None = None,
           sites: list[Site] | None = None) -> list[dict]:
-    """Check every username against every site. Returns all results
-    where state == 'found' (plus 'unknown' ones flagged for review)."""
+    """Check every username against every site.
+
+    Returns all results where state == 'found'.
+
+    progress  - called with a short string for each *hit* (kept for
+                backwards compatibility)
+    on_result - called with every result dict as it completes; use
+                this to drive a progress bar
+    """
     site_list = sites if sites is not None else SITES
     jobs = [(s, u) for u in usernames for s in site_list]
     hits: list[dict] = []
@@ -88,6 +96,8 @@ def sweep(usernames: list[str], threads: int = 16, timeout: float = 10.0,
         }
         for fut in concurrent.futures.as_completed(futures):
             result = fut.result()
+            if on_result:
+                on_result(result)
             if result["state"] == "found":
                 hits.append(result)
                 if progress:

@@ -48,7 +48,7 @@ LEAK_PATTERNS = [
     '"{email}" (filetype:txt OR filetype:csv OR filetype:sql)',
     '"{email}" (filetype:env OR filetype:log OR filetype:bak)',
     '"{email}" (inurl:paste OR inurl:dump)',
-    '"{local}" "{domain}" (confidential OR internal)',
+    '"{local}" "{email_domain}" (confidential OR internal)',
 ]
 
 
@@ -65,12 +65,17 @@ def _ctx(target) -> dict[str, str]:
     email = target.email
     local, _, domain = email.partition("@") if email else ("", "", "")
     username = target.username or (local if local else "")
+    # `domain` is for *website* recon (index-of, admin panels). Never
+    # fall back to a free-mail provider from the email address - dorking
+    # gmail.com/outlook.com is meaningless and noisy.
+    site_domain = target.domain
     return {
         "name": name,
         "email": email,
         "username": username,
         "local": local,
-        "domain": domain or target.domain,
+        "domain": site_domain,
+        "email_domain": domain,
     }
 
 

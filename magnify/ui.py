@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import contextlib
 import os
+import re
 import sys
 import threading
 import time
+
+_ANSI_RE = re.compile(r"\033\[[0-9;]*m")
 
 
 def _supports_color() -> bool:
@@ -184,6 +187,109 @@ def spinner(message: str):
     finally:
         stop.set()
         t.join(timeout=1.0)
+
+
+class ProgressBar:
+    """Thread-safe progress bar with live hit callback.
+
+    Usage:
+        bar = ProgressBar(total, label="sweeping")
+        bar.update(1, note="johndoe @ GitHub")
+        bar.finish()
+    """
+
+    _BLOCKS = "█"
+    _EMPTY = "░"
+
+    def __init__(self, total: int, label: str = "", width: int = 32,
+                 hits: int = 0):
+        self.total = max(total, 1)
+        self.label = label
+        self.width = width
+        self.count = 0
+        self.hits = hits
+        self._lock = threading.Lock()
+        self._interactive = sys.stdout.isatty() and COLOR
+
+    def _bar(self) -> str:
+        frac = self.count / self.total
+        filled = int(self.width * frac)
+        bar = self._BLOCKS * filled + self._EMPTY * (self.width - filled)
+        pct = f"{frac * 100:5.1f}%"
+        if COLOR:
+            bar = cyan(bar[:filled]) + dim(bar[filled:])
+        return f"{bar} {pct}"
+
+    def render(self, note: str = "") -> None:
+        with self._lock:
+            counter = f"{self.count}/{self.total}"
+            bar = self._bar()
+            hits = f"  {green(str(self.hits) + ' hits')}" if self.hits else ""
+            # Build from most- to least-important, dropping optional
+            # pieces when the terminal is narrow.
+            candidates = [
+                f"  {self.label} {bar} {counter}{hits}  {dim(note[:48])}",
+                f"  {self.label} {bar} {counter}{hits}",
+                f"  {bar} {counter}{hits}",
+                f"  {counter}{hits}",
+            ]
+            budget = max(_term_width() - 1, 10)
+            line = next(
+                (c for c in candidates if self._visible_len(c) <= budget),
+                candidates[-1])
+            if self._interactive:
+                self._write_line(line)
+            elif self.count in (1, self.total):
+                print(line)
+
+    @staticmethod
+    def _visible_len(text: str) -> int:
+        """Length ignoring ANSI escape sequences."""
+        return len(_ANSI_RE.sub("", text))
+
+    def _write_line(self, line: str) -> None:
+        budget = max(_term_width() - 1, 10)
+        visible = self._visible_len(line)
+        if visible > budget:
+            # truncate the visible content, preserving escape codes
+            out, shown = [], 0
+            i = 0
+            while i < len(line) and shown < budget:
+                match = _ANSI_RE.match(line, i)
+                if match:
+                    out.append(match.group())
+                    i = match.end()
+                    continue
+                out.append(line[i])
+                shown += 1
+                i += 1
+            line = "".join(out)
+        else:
+            line = line + " " * (budget - visible)
+        sys.stdout.write("\r" + line)
+        sys.stdout.flush()
+
+    def update(self, step: int = 1, note: str = "", hit: bool = False) -> None:
+        with self._lock:
+            self.count = min(self.count + step, self.total)
+            if hit:
+                self.hits += 1
+        self.render(note)
+
+    def finish(self) -> None:
+        self.count = self.total
+        self.render()
+        if self._interactive:
+            sys.stdout.write("\n")
+            sys.stdout.flush()
+
+
+def _term_width() -> int:
+    try:
+        return os.get_terminal_size().columns
+    except OSError:
+        return 80
+
 
 
 def info(text: str) -> None:

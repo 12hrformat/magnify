@@ -77,12 +77,21 @@ def _do_username_hunt(session: Session, threads: int, timeout: float) -> None:
     if session.target.username and session.target.username not in variants:
         variants.insert(0, session.target.username)
     session.usernames_checked = variants
+    total = len(variants) * len(checkers.SITES)
     ui.info(f"{len(variants)} username variants × "
-            f"{len(checkers.SITES)} sites")
-    with ui.spinner("sweeping sites (this is the 'please wait' part)"):
-        hits = checkers.sweep(
-            variants, threads=threads, timeout=timeout,
-            progress=lambda m: None)
+            f"{len(checkers.SITES)} sites = {total} probes")
+
+    bar = ui.ProgressBar(total, label="sweeping")
+
+    def _on_result(result: dict) -> None:
+        note = ""
+        if result["state"] == "found":
+            note = f"+ {result['username']} @ {result['site']}"
+        bar.update(1, note=note, hit=result["state"] == "found")
+
+    hits = checkers.sweep(
+        variants, threads=threads, timeout=timeout, on_result=_on_result)
+    bar.finish()
     session.username_hits = hits
     ui.ok(f"sweep done — {len(hits)} hits")
     for hit in hits:
@@ -145,13 +154,19 @@ def _do_ai_pivot(session: Session) -> None:
         ui.finding(pivot)
 
 
-def _save_flow(session: Session) -> None:
-    if not ui.confirm("save to a file?", default=True):
+def _save_flow(session: Session, ask_first: bool = True) -> None:
+    if ask_first and not ui.confirm("save to a file?", default=True):
         return
     stamp = time.strftime("%Y%m%d-%H%M%S")
     basepath = ui.ask("output path", f"magnify-report-{stamp}")
-    with ui.spinner("pulling everything together"):
-        md_path, json_path = report.save(session, basepath)
+    if not basepath:
+        return
+    try:
+        with ui.spinner("pulling everything together"):
+            md_path, json_path = report.save(session, basepath)
+    except OSError as exc:
+        ui.err(f"could not save report: {exc}")
+        return
     ui.ok(f"report saved:\n      {md_path}\n      {json_path}")
 
 
@@ -193,8 +208,15 @@ def _interactive(args: argparse.Namespace) -> int:
         elif choice == "6":
             _collect_target(session)
         elif choice == "quit":
+            # Quitting must always work. Offer to save, but if the
+            # prompt can't be answered (EOF / Ctrl-D), just leave.
             if not session.target.empty():
-                _save_flow(session)
+                try:
+                    if ui.confirm("save a report before quitting?",
+                                  default=False):
+                        _save_flow(session, ask_first=False)
+                except (EOFError, KeyboardInterrupt):
+                    print()
             ui.info("stay legal out there.")
             return 0
 

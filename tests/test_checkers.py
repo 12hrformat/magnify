@@ -3,6 +3,9 @@
 import http.server
 import threading
 import unittest
+import warnings
+
+warnings.filterwarnings("ignore", category=ResourceWarning)
 
 from magnify.checkers import _probe, sweep
 from magnify.sites import Site
@@ -68,6 +71,24 @@ class TestCheckers(unittest.TestCase):
                      timeout=5.0, sites=[site])
         self.assertEqual(len(hits), 1)
         self.assertEqual(hits[0]["username"], "found-user")
+
+    def test_on_result_fires_for_every_probe(self):
+        site = Site("Local", self.base + "/{u}")
+        seen = []
+        sweep(["found-user", "missing-one", "also-missing"],
+              threads=4, timeout=5.0, sites=[site],
+              on_result=seen.append)
+        self.assertEqual(len(seen), 3)
+        states = sorted(r["state"] for r in seen)
+        self.assertEqual(states, ["found", "missing", "missing"])
+
+    def test_progress_still_fires_for_hits(self):
+        site = Site("Local", self.base + "/{u}")
+        notes = []
+        sweep(["found-user", "missing-one"], threads=4, timeout=5.0,
+              sites=[site], progress=notes.append)
+        self.assertEqual(len(notes), 1)
+        self.assertIn("found-user", notes[0])
 
 
 if __name__ == "__main__":
