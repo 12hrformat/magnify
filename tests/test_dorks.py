@@ -39,14 +39,15 @@ class TestDorks(unittest.TestCase):
         """Regression: an email must not cause site:gmail.com dorks."""
         cfg = DorkConfig(modifiers=["intitle:index of"], include_leaks=True)
         out = build(Target(email="testuser@example.com"), cfg)
-        self.assertFalse(any("site:gmail.com" in d for d in out),
+        self.assertFalse(any("site:example.com" in d for d in out),
                          f"leaked provider dorks: {out}")
+        self.assertFalse(any("site:gmail.com" in d for d in out))
 
     def test_email_still_powers_leak_battery(self):
         cfg = DorkConfig(modifiers=["intitle:index of"], include_leaks=True)
         out = build(Target(email="testuser@example.com"), cfg)
         self.assertTrue(any("testuser@example.com" in d for d in out))
-        self.assertTrue(any('"testuser" "gmail.com"' in d for d in out))
+        self.assertTrue(any('"testuser" "example.com"' in d for d in out))
 
     def test_real_domain_still_generates_index_dorks(self):
         cfg = DorkConfig(modifiers=["intitle:index of"], include_leaks=False)

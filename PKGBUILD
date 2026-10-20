@@ -1,4 +1,4 @@
-# Maintainer: 12hrformat <12hrformat>
+# Maintainer: 12hrformat
 
 pkgname=magnify
 pkgver=0.1.0

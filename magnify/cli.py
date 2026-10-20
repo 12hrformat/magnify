@@ -12,7 +12,8 @@ import argparse
 import sys
 import time
 
-from . import __version__, checkers, dorks, emailintel, llm, report, search, ui
+from . import (__version__, checkers, dorks, emailintel, help_menu, llm,
+               report, search, ui)
 from .session import Session, Target
 from .usernames import generate as gen_usernames
 
@@ -31,6 +32,10 @@ def _build_parser() -> argparse.ArgumentParser:
                    help="non-interactive: build default dork battery")
     p.add_argument("--save", metavar="BASEPATH",
                    help="non-interactive: save report to BASEPATH.md/.json")
+    p.add_argument("--help-backends", action="store_true",
+                   help="show how to connect search/AI/email backends")
+    p.add_argument("--status", action="store_true",
+                   help="show which backends are currently connected")
     p.add_argument("--threads", type=int, default=16)
     p.add_argument("--timeout", type=float, default=10.0)
     p.add_argument("--no-color", action="store_true")
@@ -128,14 +133,14 @@ def _do_dork_workshop(session: Session) -> None:
             total = sum(len(r.get("hits", [])) for r in session.search_results)
             ui.ok(f"{total} search results collected")
     else:
-        ui.info("no search backend configured "
-                "(set MAGNIFY_SEARX_URL or SERPAPI_KEY to execute)")
+        ui.info("no search backend configured — press [h] in the main "
+                "menu for connection instructions")
 
 
 def _do_ai_pivot(session: Session) -> None:
     if not llm.enabled():
-        ui.warn("AI disabled — set MAGNIFY_LLM_URL "
-                "(e.g. http://localhost:11434/v1 for Ollama)")
+        ui.warn("AI disabled — press [h] in the main menu for connection "
+                "instructions (or set MAGNIFY_LLM_URL)")
         return
     payload = {
         "target": vars(session.target),
@@ -190,6 +195,7 @@ def _interactive(args: argparse.Namespace) -> int:
         ("4", "AI pivot suggestions"),
         ("5", "save report"),
         ("6", "edit target"),
+        ("h", "help / connect a backend"),
         ("q", "quit"),
     ]
     while True:
@@ -207,6 +213,8 @@ def _interactive(args: argparse.Namespace) -> int:
             _save_flow(session)
         elif choice == "6":
             _collect_target(session)
+        elif choice == "h":
+            help_menu.menu()
         elif choice == "quit":
             # Quitting must always work. Offer to save, but if the
             # prompt can't be answered (EOF / Ctrl-D), just leave.
@@ -222,6 +230,19 @@ def _interactive(args: argparse.Namespace) -> int:
 
 
 def _noninteractive(args: argparse.Namespace) -> int:
+    if args.status:
+        help_menu.show_status()
+        return 0
+    if args.help_backends:
+        for title, body in (
+            ("connect a search backend", help_menu.SEARX_GUIDE),
+            ("connect an AI backend", help_menu.LLM_GUIDE),
+            ("connect email backends", help_menu.EMAIL_GUIDE),
+            ("authorized use only", help_menu.LEGAL),
+        ):
+            print(ui.cyan(f"=== {title} ==="))
+            print(body)
+        return 0
     session = Session(Target(
         name=args.name or "", email=args.email or "",
         username=args.username or "", domain=args.domain or ""))
@@ -257,12 +278,10 @@ def main(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
     if args.no_color:
         ui.COLOR = False
-    scripted = any((args.sweep, args.dorks, args.save))
-    if scripted and not sys.stdin.isatty():
+    # Non-interactive paths never prompt.
+    if args.help_backends or args.status:
         return _noninteractive(args)
-    if scripted and args.sweep and not sys.stdout.isatty():
-        return _noninteractive(args)
-    if scripted:
+    if any((args.sweep, args.dorks, args.save)):
         return _noninteractive(args)
     try:
         return _interactive(args)

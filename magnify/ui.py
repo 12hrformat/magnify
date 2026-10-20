@@ -11,6 +11,9 @@ import time
 
 _ANSI_RE = re.compile(r"\033\[[0-9;]*m")
 
+# Indirection so tests can drive prompts without a real terminal.
+input = input  # noqa: A001  (rebound by tests)
+
 
 def _supports_color() -> bool:
     if os.environ.get("NO_COLOR"):
