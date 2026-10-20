@@ -74,7 +74,7 @@ def banner() -> None:
     # Strip trailing whitespace so we never emit lines wider than the
     # art itself (keeps it from wrapping on an 80-column terminal).
     print(cyan("\n".join(line.rstrip() for line in art.splitlines())))
-    print(dim("                          interactive OSINT orchestrator  |  Made by 12hrformat (Dragon) "))
+    print(dim("  interactive OSINT orchestrator  |  Made by 12hrformat (Dragon) "))
     print()
 
 
