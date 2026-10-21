@@ -248,7 +248,7 @@ def _interactive(args: argparse.Namespace) -> int:
             _collect_target(session)
         elif choice == "h":
             help_menu.menu()
-        elif choice == "quit":
+        elif choice == "q":
             # Quitting must always work. Offer to save, but if the
             # prompt can't be answered (EOF / Ctrl-D), just leave.
             if not session.target.empty():
